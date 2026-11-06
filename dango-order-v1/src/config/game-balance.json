@@ -1,0 +1,1 @@
+{"order":{"earlyLength":3,"lateAfterServed":5,"lateLength":4},"patience":{"seconds":12,"wrongTapPenaltySeconds":1.5},"shift":{"maxTimeSeconds":99,"seconds":60}}

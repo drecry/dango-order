@@ -1,0 +1,12 @@
+{
+  // Cloudflare Workers Static Assets config for Dango Order.
+  // Deployment is NOT enabled by default: mirror Dango Drop and set the
+  // CLOUDFLARE_DEPLOY_ENABLED variable in the repo before enabling the
+  // deploy step in .github/workflows/deploy.yml. See docs/deployment.md.
+  "$schema": "https://developers.cloudflare.com/workers/wrangler/configuration.schema.json",
+  "name": "dango-order",
+  "compatibility_date": "2026-11-06",
+  "assets": {
+    "directory": "./dist/dango-order"
+  }
+}

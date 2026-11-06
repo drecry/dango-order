@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" data-orientation-mode="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      Mobile-first viewport:
+      - width=device-width: follow the device width
+      - initial-scale=1.0: fixed initial zoom
+      - maximum-scale=1.0 / user-scalable=no: prevent accidental pinch-zoom mid-game
+      - viewport-fit=cover: extend the background into the iPhone notch area
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <!-- Show as close to fullscreen as possible when added to the iOS home screen -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Tab title. All user-facing text is English (worldwide release). -->
+    <title>Dango Order</title>
+    <!--
+      Social card (OGP / Twitter Card) — paste the URL into X, LINE or
+      Discord and a card with image + title + description appears.
+      Images must be absolute URLs: social servers fetch the page from
+      outside, so a relative /ogp.png would not resolve.
+      The image file is public/ogp.png (1200x630).
+    -->
+    <meta property="og:title" content="Dango Order" />
+    <meta
+      property="og:description"
+      content="Serve it. Sell it. Smile! How much can you sell in 60 seconds?"
+    />
+    <meta property="og:image" content="https://drecry.com/dango-order/ogp.png" />
+    <meta property="og:url" content="https://drecry.com/dango-order/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="DREAM CRYSTAL" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Dango Order" />
+    <meta
+      name="twitter:description"
+      content="Serve it. Sell it. Smile! How much can you sell in 60 seconds?"
+    />
+    <meta name="twitter:image" content="https://drecry.com/dango-order/ogp.png" />
+    <link rel="canonical" href="https://drecry.com/dango-order/" />
+    <meta
+      name="description"
+      content="Serve it. Sell it. Smile! A cozy 60-second dango shop game where every order you serve is sold at the shop."
+    />
+    <!--
+      Official fonts (adopted by family decision in Dango Drop, ADR-0003):
+      - Headings: Mochiy Pop One / Body: Zen Maru Gothic
+      Canvas text needs document.fonts.load(), done in PreloadScene.
+      Offline fallback: system fonts.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <style>
+      /* Keep the letterbox bands the same cream as the game canvas. */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f9edda;
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #game {
+        width: 100%;
+        height: 100%;
+      }
+      #game canvas {
+        display: block;
+        margin: 0 auto;
+        touch-action: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
