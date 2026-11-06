@@ -1,0 +1,40 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.idea/
+*.swp
+*.swo
+
+# Env / Secrets (never commit)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Node.js
+node_modules/
+dist/
+build/
+coverage/
+*.log
+npm-debug.log*
+
+# Claude Code local settings (not shared)
+.claude/settings.local.json
+
+# Temporary files
+*.tmp
+*.bak
+
+# Wrangler local output
+.wrangler/
+
+# Generated dango images (decoded from the committed *.png.b64 files by
+# `node scripts/decode-assets.mjs`, which runs automatically before dev/build).
+# The .png.b64 files are the tracked source of truth; see README.md.
+public/assets/dango/*.png
+public/ogp.png
