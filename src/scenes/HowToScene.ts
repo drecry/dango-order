@@ -6,9 +6,10 @@
  * screen. All text is English.
  */
 import Phaser from 'phaser';
-import { GAME_WIDTH } from '../config/dimensions';
+import { GAME_WIDTH, GAME_HEIGHT } from '../config/dimensions';
+import { BACKGROUND_KEY } from '../constants/assets';
 import { loadEconomy } from '../systems/EconomyConfig';
-import { bodyText, headingText, makeButton } from './ui';
+import { addSoftPanel, bodyText, headingText, makeButton } from './ui';
 
 export const HOW_TO_SCENE_KEY = 'HowToScene';
 
@@ -19,6 +20,11 @@ export class HowToScene extends Phaser.Scene {
 
   create(): void {
     const economy = loadEconomy();
+    // Shop background illustration (drawn first, behind everything).
+    this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND_KEY)
+      .setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+    addSoftPanel(this, GAME_WIDTH / 2, 430, 500, 800, 0.35);
     headingText(this, GAME_WIDTH / 2, 84, 'HOW TO PLAY', 40);
 
     const steps: { icon: string; title: string; text: string }[] = [

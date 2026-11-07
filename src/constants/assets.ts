@@ -93,3 +93,35 @@ export const DANGO_INFO: Record<DangoKind, DangoInfo> = {
 /** Path of a dango image inside public/ (Vite serves public/ at the base). */
 export const dangoImagePath = (kind: DangoKind): string =>
   `assets/dango/${kind}.png`;
+
+/** Phaser texture key of the shop background illustration. */
+export const BACKGROUND_KEY = 'bg-order';
+
+/** Path of the shop background (public/assets/bg-order.webp). */
+export const BACKGROUND_PATH = 'assets/bg-order.webp';
+
+/** Customer expressions (only these three friends have variants). */
+export type DangoExpression = 'happy' | 'sad' | 'angry';
+
+/** Kinds whose Drive art includes expression variants. */
+export const EXPRESSION_KINDS: readonly DangoKind[] = [
+  'shiratama',
+  'sakura',
+  'yomogi',
+];
+
+/** Whether a kind has expression-variant art. */
+export const hasExpressions = (kind: DangoKind): boolean =>
+  EXPRESSION_KINDS.includes(kind);
+
+/** Phaser texture key for an expression variant: `<kind>-<expression>`. */
+export const expressionKey = (
+  kind: DangoKind,
+  expression: DangoExpression,
+): string => `${kind}-${expression}`;
+
+/** Path of an expression-variant image inside public/. */
+export const expressionImagePath = (
+  kind: DangoKind,
+  expression: DangoExpression,
+): string => `assets/dango/${kind}-${expression}.png`;

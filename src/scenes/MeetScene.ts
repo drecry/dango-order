@@ -5,10 +5,14 @@
  * menu prices and one-line personalities. Reached from the title screen.
  */
 import Phaser from 'phaser';
-import { GAME_WIDTH } from '../config/dimensions';
-import { ALL_DANGO_KINDS, DANGO_INFO } from '../constants/assets';
+import { GAME_WIDTH, GAME_HEIGHT } from '../config/dimensions';
+import {
+  ALL_DANGO_KINDS,
+  BACKGROUND_KEY,
+  DANGO_INFO,
+} from '../constants/assets';
 import { loadEconomy } from '../systems/EconomyConfig';
-import { bodyText, headingText, makeButton } from './ui';
+import { addSoftPanel, bodyText, headingText, makeButton } from './ui';
 
 export const MEET_SCENE_KEY = 'MeetScene';
 
@@ -19,6 +23,11 @@ export class MeetScene extends Phaser.Scene {
 
   create(): void {
     const economy = loadEconomy();
+    // Shop background illustration (drawn first, behind everything).
+    this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, BACKGROUND_KEY)
+      .setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+    addSoftPanel(this, GAME_WIDTH / 2, 470, 500, 840, 0.35);
     headingText(this, GAME_WIDTH / 2, 72, 'MEET THE DANGO', 36);
     bodyText(
       this,

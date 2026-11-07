@@ -87,6 +87,24 @@ export const makeIconButton = (
   return container;
 };
 
+/**
+ * A soft cream panel drawn BEHIND text, so words stay readable over
+ * the shop background illustration (same helper as Dango Tower).
+ */
+export const addSoftPanel = (
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  alpha = 0.55,
+): Phaser.GameObjects.Graphics => {
+  const g = scene.add.graphics();
+  g.fillStyle(0xfff7e6, alpha);
+  g.fillRoundedRect(x - width / 2, y - height / 2, width, height, 18);
+  return g;
+};
+
 export const headingText = (
   scene: Phaser.Scene,
   x: number,

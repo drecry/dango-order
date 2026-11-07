@@ -38,3 +38,8 @@ npm-debug.log*
 # The .png.b64 files are the tracked source of truth; see README.md.
 public/assets/dango/*.png
 public/ogp.png
+
+# Expression variants are committed as real PNGs (v2), like Dango Tower.
+!public/assets/dango/*-happy.png
+!public/assets/dango/*-sad.png
+!public/assets/dango/*-angry.png
