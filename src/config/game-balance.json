@@ -1,1 +1,1 @@
-{"order":{"earlyLength":3,"lateAfterServed":5,"lateLength":4},"patience":{"seconds":12,"wrongTapPenaltySeconds":1.5},"shift":{"maxTimeSeconds":99,"seconds":60}}
+{"order":{"earlyLength":3,"lateAfterServed":5,"lateLength":4,"multiSkewer":{"chance":0.35,"count":3,"fromCustomer":4},"patienceScaleMulti":1.8},"patience":{"seconds":12,"wrongTapPenaltySeconds":1.5},"shift":{"maxTimeSeconds":99,"seconds":60}}

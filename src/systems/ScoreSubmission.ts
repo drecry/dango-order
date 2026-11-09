@@ -15,7 +15,7 @@ export interface OrderRunStats {
   served: number;
   /** Best combo reached during the shift. */
   maxCombo: number;
-  /** Golden (VIP) orders served during the shift. */
+  /** Golden (VIP) SKEWERS served during the shift (v3 counts skewers). */
   goldenCount: number;
 }
 

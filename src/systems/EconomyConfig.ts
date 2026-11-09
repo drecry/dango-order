@@ -30,6 +30,8 @@ interface BalanceJson {
     earlyLength: number;
     lateLength: number;
     lateAfterServed: number;
+    multiSkewer: { count: number; chance: number; fromCustomer: number };
+    patienceScaleMulti: number;
   };
 }
 
@@ -60,5 +62,9 @@ export const loadBalance = (): Balance => {
     earlyOrderLength: json.order.earlyLength,
     lateOrderLength: json.order.lateLength,
     lateAfterServed: json.order.lateAfterServed,
+    multiSkewerCount: json.order.multiSkewer.count,
+    multiSkewerChance: json.order.multiSkewer.chance,
+    multiSkewerFromCustomer: json.order.multiSkewer.fromCustomer,
+    patienceScaleMulti: json.order.patienceScaleMulti,
   };
 };

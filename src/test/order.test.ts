@@ -6,15 +6,28 @@ import { describe, expect, it } from 'vitest';
 import {
   applyLeave,
   applyServe,
+  applyServeOrder,
+  countGoldenSkewers,
+  countMatchaSkewers,
   DEFAULT_BALANCE,
   DEFAULT_ECONOMY,
   hasMatcha,
   initialState,
   isVipOrder,
+  patienceForOrder,
+  rollCustomerOrder,
   rollOrder,
   serveDG,
+  serveOrderDG,
+  serveSkewerDG,
   tick,
 } from '../logic/order';
+
+/** An RNG that replays a fixed sequence (last value repeats). */
+const queueRandom = (values: number[]): (() => number) => {
+  let i = 0;
+  return () => values[Math.min(i++, values.length - 1)];
+};
 
 describe('rollOrder', () => {
   it('rolls 3 dango early in the shift, 4 after 5 served', () => {
@@ -120,6 +133,120 @@ describe('applyServe / applyLeave / tick — full shift flow', () => {
     let state = { ...initialState(), timeLeft: 98 };
     const r = applyServe(state, ['shiratama', 'anko', 'matcha'], 5);
     expect(r.state.timeLeft).toBe(99);
+  });
+});
+
+describe('rollCustomerOrder — v3 multi-skewer orders', () => {
+  it('customers 1-3 always order a single skewer', () => {
+    // random() = 0 would pass any chance check, but the warm-up gate
+    // (fromCustomer = 4) keeps the first three customers single.
+    for (const n of [1, 2, 3]) {
+      const skewers = rollCustomerOrder(
+        0,
+        n,
+        DEFAULT_ECONOMY,
+        DEFAULT_BALANCE,
+        () => 0,
+      );
+      expect(skewers).toHaveLength(1);
+    }
+  });
+
+  it('the 4th customer onward can order 3 skewers at once', () => {
+    // First draw 0.1 < 0.35 chance -> multi. Then each skewer rolls
+    // 3 regular picks (0.5 -> sakura) + a plain special (0.5).
+    const random = queueRandom([0.1, ...Array(12).fill(0.5)]);
+    const skewers = rollCustomerOrder(
+      0,
+      4,
+      DEFAULT_ECONOMY,
+      DEFAULT_BALANCE,
+      random,
+    );
+    expect(skewers).toHaveLength(3);
+    for (const skewer of skewers) {
+      expect(skewer).toEqual(['sakura', 'sakura', 'sakura']);
+    }
+  });
+
+  it('a missed chance roll stays a single skewer', () => {
+    const random = queueRandom([0.9, 0.5, 0.5, 0.5, 0.5]);
+    const skewers = rollCustomerOrder(
+      0,
+      7,
+      DEFAULT_ECONOMY,
+      DEFAULT_BALANCE,
+      random,
+    );
+    expect(skewers).toHaveLength(1);
+  });
+
+  it('multi-skewer orders get a longer patience bar', () => {
+    expect(patienceForOrder(1)).toBe(12);
+    expect(patienceForOrder(3)).toBeCloseTo(21.6);
+  });
+});
+
+describe('serveOrderDG — every skewer is sold, bonuses land once', () => {
+  const skewerA: Array<'shiratama' | 'anko' | 'sakura'> = [
+    'shiratama',
+    'anko',
+    'sakura',
+  ]; // 1+2+3 = 6 -> 18
+  const skewerB = ['sakura', 'yomogi', 'golden'] as const; // 3+5+100 = 108 -> 324 -> VIP 648
+  const skewerC = ['anko', 'anko', 'matcha'] as const; // 2+2+10 = 14 -> 42
+
+  it('prices a skewer on its own (Golden skewer sells for 2x)', () => {
+    expect(serveSkewerDG(skewerA)).toBe(18);
+    expect(serveSkewerDG(skewerB)).toBe(648);
+    expect(serveSkewerDG(skewerC)).toBe(42);
+  });
+
+  it('sums the skewers, then adds wait + combo once for the order', () => {
+    // 18 + 648 + 42 = 708. Patience 10.9 -> 10 whole seconds x2 = 20.
+    // Combo 2 -> 10. Total 738.
+    expect(serveOrderDG([skewerA, skewerB, skewerC], 10.9, 2)).toBe(738);
+    // A single-skewer order matches the classic serveDG exactly.
+    expect(serveOrderDG([skewerA], 10, 1)).toBe(serveDG(skewerA, 10, 1));
+  });
+
+  it('counts golden and matcha skewers in an order', () => {
+    expect(countGoldenSkewers([skewerA, skewerB, skewerC])).toBe(1);
+    expect(countMatchaSkewers([skewerA, skewerB, skewerC])).toBe(1);
+  });
+});
+
+describe('applyServeOrder — a full multi-skewer serve', () => {
+  it('steps the combo once and pays each matcha skewer +3s', () => {
+    let state = { ...initialState(), combo: 1 };
+    const skewers = [
+      ['shiratama', 'anko', 'sakura'],
+      ['sakura', 'yomogi', 'golden'],
+      ['anko', 'anko', 'matcha'],
+    ] as const;
+    const r = applyServeOrder(state, skewers, 10.9);
+    expect(r.earnedDG).toBe(738);
+    expect(r.goldenSkewers).toBe(1);
+    expect(r.matchaSkewers).toBe(1);
+    expect(r.timeBonus).toBe(3);
+    expect(r.isVip).toBe(true);
+    state = r.state;
+    expect(state.served).toBe(1);
+    expect(state.combo).toBe(2);
+    expect(state.totalDG).toBe(738);
+    expect(state.timeLeft).toBe(63);
+
+    // Two matcha skewers in one order buy +6 seconds.
+    const r2 = applyServeOrder(
+      state,
+      [
+        ['anko', 'sakura', 'matcha'],
+        ['shiratama', 'anko', 'matcha'],
+      ],
+      5,
+    );
+    expect(r2.timeBonus).toBe(6);
+    expect(r2.state.timeLeft).toBe(69);
   });
 });
 

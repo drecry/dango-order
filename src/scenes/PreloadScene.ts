@@ -7,9 +7,12 @@ import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config/dimensions';
 import {
   ALL_DANGO_KINDS,
+  ANIMAL_KINDS,
   BACKGROUND_KEY,
   BACKGROUND_PATH,
   EXPRESSION_KINDS,
+  animalImagePath,
+  animalKey,
   dangoImagePath,
   expressionImagePath,
   expressionKey,
@@ -47,6 +50,10 @@ export class PreloadScene extends Phaser.Scene {
           expressionImagePath(kind, expression),
         );
       }
+    }
+    // The animal customers (v3): six generated watercolor portraits.
+    for (const animal of ANIMAL_KINDS) {
+      this.load.image(animalKey(animal), animalImagePath(animal));
     }
     // The shop background illustration, used by every scene.
     this.load.image(BACKGROUND_KEY, BACKGROUND_PATH);

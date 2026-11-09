@@ -125,3 +125,34 @@ export const expressionImagePath = (
   kind: DangoKind,
   expression: DangoExpression,
 ): string => `assets/dango/${kind}-${expression}.png`;
+
+/**
+ * Customer animals (v3). The customers are cute animals now — generated
+ * watercolor portraits, circular-cropped with baked-in alpha so they
+ * sit inside the portrait ring. Purely cosmetic: who walks in never
+ * changes the order rules.
+ */
+export type AnimalKind =
+  | 'rabbit'
+  | 'cat'
+  | 'bear'
+  | 'panda'
+  | 'fox'
+  | 'hamster';
+
+/** All six animal customers, for loading and random picks. */
+export const ANIMAL_KINDS: readonly AnimalKind[] = [
+  'rabbit',
+  'cat',
+  'bear',
+  'panda',
+  'fox',
+  'hamster',
+];
+
+/** Phaser texture key for an animal portrait: `animal-<kind>`. */
+export const animalKey = (kind: AnimalKind): string => `animal-${kind}`;
+
+/** Path of an animal portrait inside public/. */
+export const animalImagePath = (kind: AnimalKind): string =>
+  `assets/animals/${kind}.webp`;

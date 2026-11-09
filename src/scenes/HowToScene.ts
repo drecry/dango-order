@@ -31,22 +31,22 @@ export class HowToScene extends Phaser.Scene {
       {
         icon: 'shiratama',
         title: '1. Read the order',
-        text: 'A customer wants a skewer of dango, in order from the bottom up. Tap the dango in that order.',
+        text: 'An animal customer shows its order in the bubble. Sometimes it asks for 3 skewers at once!',
       },
       {
         icon: 'sakura',
-        title: '2. Tap the pad',
-        text: 'Tap the matching dango on the pad to build the skewer. A wrong dango tries the customer\'s patience!',
+        title: '2. Build the pink skewer',
+        text: 'Tap the pad to build the framed skewer, bottom dango first. Each tap skewers a dango on top!',
       },
       {
         icon: 'matcha',
-        title: '3. Serve fast',
-        text: 'Serve before the patience bar runs out for a wait bonus. Serves in a row build a combo!',
+        title: '3. Press SERVE',
+        text: 'Finished skewers get a green check. When every skewer is done, SERVE lights up — tap it to serve!',
       },
       {
         icon: 'golden',
-        title: '4. Every order is sold',
-        text: 'Each served skewer is sold at the shop. DG is your score — the faster you serve, the richer the shop!',
+        title: '4. Every skewer is sold',
+        text: 'Serve before the patience bar runs out for a wait bonus. Serves in a row build a combo!',
       },
     ];
 
@@ -79,7 +79,7 @@ export class HowToScene extends Phaser.Scene {
       this,
       GAME_WIDTH / 2,
       y + 52,
-      `DG = sum of prices x ${economy.sellMultiplier} (VIP order x${economy.vipMultiplier}) + wait bonus (+${economy.waitBonusPerSecond} DG per patience second left) + combo bonus (${economy.comboBonus} DG x combo)\nMatcha order: +${economy.matchaBonusSeconds} seconds! Golden order: VIP, 2x sales!`,
+      `Each skewer: sum of prices x ${economy.sellMultiplier} (a skewer with Golden x${economy.vipMultiplier}). Wait bonus +${economy.waitBonusPerSecond} DG per patience second left and combo bonus ${economy.comboBonus} DG x combo land once per order.\nEvery Matcha skewer: +${economy.matchaBonusSeconds} seconds!`,
       17,
     ).setOrigin(0.5, 0);
 
