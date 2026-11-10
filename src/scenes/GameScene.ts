@@ -10,9 +10,10 @@
  * runs THROUGH them, handle hanging below the bottom dango.
  *
  * Build the skewer framed in pink by tapping the 2x4 pad (seven
- * dango + SERVE): the big skewer is ONE bamboo stick — pointed
- * tip at the top, shaft running down through the stack, handle
- * below. Each correct dango rides to the tip and slides DOWN
+ * dango + SERVE): the big skewer is ONE bamboo stick — shaft
+ * running down through the stack, handle below, and its top end
+ * always hidden INSIDE the topmost dango, so the top dango caps
+ * the skewer. Each correct dango rides to the top and slides DOWN
  * ALONG THE SHAFT, piercing onto the top of the stack — first
  * tapped at the bottom. A finished
  * skewer gets a green check in the bubble; when every skewer is
@@ -79,18 +80,22 @@ const BUBBLE_H = 238;
 const BUBBLE_INNER_X = 240;
 const BUBBLE_INNER_W = 267;
 
-/* Building skewer: ONE full bamboo skewer — a pointed tip at the
- * top, a shaft running down THROUGH the dango stack, and the
- * rounded handle end resting toward the counter. Seated dango
- * nestle (centres ~13% closer than the dango diameter) so the
- * column reads as pierced, not stacked. */
+/* Building skewer: ONE full bamboo skewer — a shaft running down
+ * THROUGH the dango stack, and the rounded handle end resting
+ * toward the counter. The shaft's top end always finishes INSIDE
+ * the topmost dango (it tracks a sliding dango as it descends),
+ * so no stick ever shows above the top dango: the dango caps the
+ * skewer. Seated dango nestle (centres ~13% closer than the dango
+ * diameter) so the column reads as pierced, not stacked. RISE_Y
+ * is where a tapped dango arrives above the stack before its
+ * descent — and the standing height of an untouched bare stick. */
 const SKEWER_X = 190;
 const SLOT_BOTTOM_Y = 590;
 const SLOT_STEP = 80;
 const BUILD_DANGO_SIZE = 92;
-const TIP_Y = 296;
+const RISE_Y = 296;
 const STICK_BOTTOM_Y = 742;
-const STICK_PIVOT_Y = (TIP_Y + STICK_BOTTOM_Y) / 2;
+const STICK_PIVOT_Y = (RISE_Y + STICK_BOTTOM_Y) / 2;
 
 /* The 2x4 pad: [SHIRATAMA ANKO SAKURA MITARASHI] / [YOMOGI MATCHA GOLDEN SERVE]. */
 const PAD_X0 = 19;
@@ -190,6 +195,8 @@ export class GameScene extends Phaser.Scene {
   private messageText: Phaser.GameObjects.Text | null = null;
   private skewer: Phaser.GameObjects.Container | null = null;
   private stickGfx: Phaser.GameObjects.Graphics | null = null;
+  /** Dango clones currently sliding down the shaft (phase 2). */
+  private sliders = new Set<Phaser.GameObjects.Image>();
   private padCards = new Map<DangoKind, PadCard>();
   private serveBg: Phaser.GameObjects.Rectangle | null = null;
   private serveText: Phaser.GameObjects.Text | null = null;
@@ -210,6 +217,7 @@ export class GameScene extends Phaser.Scene {
     this.currentSkewer = 0;
     this.completed = [];
     this.built = [];
+    this.sliders.clear();
     this.inFlight = 0;
     this.skewerTransition = false;
     this.customerSeq = 0;
@@ -326,6 +334,7 @@ export class GameScene extends Phaser.Scene {
     this.completed = this.skewers.map(() => false);
     this.currentSkewer = 0;
     this.built = [];
+    this.sliders.clear();
     this.inFlight = 0;
     this.skewerTransition = false;
     if (this.skewer) {
@@ -425,12 +434,14 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * The skewering animation: the dango hops off its pad card and
-   * rises to the TIP of the bamboo skewer, then slides straight
+   * rises to the top of the bamboo skewer, then slides straight
    * DOWN ALONG THE SHAFT and pierces onto the top of the stack —
-   * the shaft is drawn behind it, so the stick visibly threads it
-   * for the whole descent. Stretched while it slides, squash on
-   * landing, a wobble of the stick and a tiny settle dip of the
-   * whole skewer. The dango only counts as built once it lands.
+   * the shaft is drawn behind it, and its top end tracks INSIDE
+   * the sliding dango for the whole descent, so the stick visibly
+   * threads it yet never pokes out above it. Stretched while it
+   * slides, squash on landing, a wobble of the stick and a tiny
+   * settle dip of the whole skewer. The dango only counts as
+   * built once it lands.
    */
   private flyDangoToSkewer(kind: DangoKind, slotIndex: number): void {
     const seq = this.customerSeq;
@@ -441,15 +452,15 @@ export class GameScene extends Phaser.Scene {
     const startX = card ? card.x : SKEWER_X;
     const startY = card ? card.y - 30 : 700;
     const targetY = SLOT_BOTTOM_Y - slotIndex * SLOT_STEP;
-    // Threading always starts at the TIP, however deep the slot:
+    // Threading always starts at the top, however deep the slot:
     // the dango rides to the top of the shaft first.
-    const aboveY = TIP_Y;
+    const aboveY = RISE_Y;
     const clone = this.add
       .image(startX, startY, kind)
       .setDisplaySize(BUILD_DANGO_SIZE, BUILD_DANGO_SIZE)
       .setDepth(40);
     const baseScale = clone.scaleX;
-    // Phase 1: rise to the tip, centred on the skewer axis.
+    // Phase 1: rise to the top, centred on the skewer axis.
     this.tweens.add({
       targets: clone,
       x: SKEWER_X,
@@ -459,6 +470,7 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => {
         if (!clone.active) return;
         // Phase 2: the pierce — straight down the shaft, stretching.
+        // The shaft's top end tracks inside this dango as it slides.
         this.tweens.add({
           targets: clone,
           y: targetY,
@@ -468,10 +480,16 @@ export class GameScene extends Phaser.Scene {
             240,
           ),
           ease: 'Quad.easeIn',
+          onStart: () => {
+            this.sliders.add(clone);
+            this.refreshStickTop();
+          },
           onUpdate: () => {
             clone.setScale(baseScale * 0.94, baseScale * 1.13);
+            this.refreshStickTop();
           },
           onComplete: () => {
+            this.sliders.delete(clone);
             clone.destroy();
             if (seq !== this.customerSeq) return;
             this.inFlight = Math.max(0, this.inFlight - 1);
@@ -672,10 +690,10 @@ export class GameScene extends Phaser.Scene {
       const flyer = this.add.container(cx, topY).setDepth(45);
       const bottomLocal = (skewer.length - 1) * spacing;
       const g = this.add.graphics();
+      // Shaft ends inside the top dango (local y 0) — no tip above.
       g.lineStyle(5, 0xb27c4a, 1);
-      g.lineBetween(0, -size / 2 - 5, 0, bottomLocal + size / 2 + stick);
+      g.lineBetween(0, 0, 0, bottomLocal + size / 2 + stick);
       g.fillStyle(0xb27c4a, 1);
-      g.fillTriangle(-4, -size / 2 - 1, 4, -size / 2 - 1, 0, -size / 2 - 8);
       g.fillCircle(0, bottomLocal + size / 2 + stick, 3.5);
       const parts: Phaser.GameObjects.GameObject[] = [g];
       skewer.forEach((kind, j) => {
@@ -823,6 +841,7 @@ export class GameScene extends Phaser.Scene {
     this.completed = skewers.map(() => false);
     this.currentSkewer = 0;
     this.built = [];
+    this.sliders.clear();
     this.inFlight = 0;
     this.skewerTransition = false;
     this.customerSeq += 1;
@@ -1092,9 +1111,10 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Redraw the bubble: box + tail, then one mini skewer per ordered
-   * skewer — dango threaded on a shaft, tiny tip above, handle below.
-   * Done skewers dim with a green check; the current one is framed
-   * pink and its next dango pulses; the rest wait quietly.
+   * skewer — dango threaded on a shaft that ends inside the top
+   * dango, handle below. Done skewers dim with a green check; the
+   * current one is framed pink and its next dango pulses; the rest
+   * wait quietly.
    */
   private renderBubble(): void {
     const g = this.bubbleArt;
@@ -1122,16 +1142,15 @@ export class GameScene extends Phaser.Scene {
       const done = this.completed[i];
       const isCurrent = i === this.currentSkewer && !done;
       const bottomY = topY + (skewer.length - 1) * spacing;
-      // The stick: ONE shaft THROUGH the dango column — a tiny
-      // pointed tip above the top dango, the handle below the
-      // bottom one. It is drawn on the bubble graphics, i.e.
-      // BEHIND the dango images, so the dango hide it where they
-      // sit on it and it reads as piercing, not perching.
-      const topEdge = topY - size / 2;
+      // The stick: ONE shaft THROUGH the dango column, ending
+      // INSIDE the top dango (nothing shows above it) with the
+      // handle below the bottom one. It is drawn on the bubble
+      // graphics, i.e. BEHIND the dango images, so the dango hide
+      // it where they sit on it and it reads as piercing, not
+      // perching.
       g.lineStyle(5, 0xb27c4a, done ? 0.5 : 0.95);
-      g.lineBetween(cx, topEdge - 5, cx, bottomY + size / 2 + stick);
+      g.lineBetween(cx, topY, cx, bottomY + size / 2 + stick);
       g.fillStyle(0xb27c4a, done ? 0.5 : 0.95);
-      g.fillTriangle(cx - 4, topEdge - 1, cx + 4, topEdge - 1, cx, topEdge - 8);
       g.fillCircle(cx, bottomY + size / 2 + stick, 3.5);
       // Pink frame around the skewer being built.
       if (isCurrent) {
@@ -1209,30 +1228,68 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Redraw the big building skewer: ONE bamboo stick — pointed
-   * tip at the top, shaft running down through the stack, rounded
-   * handle end toward the counter. The stick is drawn FIRST, so
-   * seated dango cover the shaft where they sit on it: it
-   * disappears into each dango's underside and bare shaft (plus
-   * the tip) stands above an unfinished stack. `built[0]` is the
-   * bottom dango, just above the handle section.
+   * Where the shaft's top end sits: always INSIDE the topmost
+   * dango, so nothing of the stick ever shows above it. While a
+   * dango slides down the shaft, the end tracks inside THAT
+   * dango; otherwise it rests inside the top seated dango. An
+   * untouched skewer (no dango involved yet) just stands at the
+   * standing height.
+   */
+  private stickTopY(): number {
+    let top: number | null = null;
+    if (this.built.length > 0) {
+      top = SLOT_BOTTOM_Y - (this.built.length - 1) * SLOT_STEP;
+    }
+    this.sliders.forEach((s) => {
+      if (s.active) top = top === null ? s.y : Math.min(top, s.y);
+    });
+    return top ?? RISE_Y;
+  }
+
+  /**
+   * Redraw the bamboo shaft with its top end at `topY` (scene
+   * coordinates): the shaft body, a lighter centre stripe, and
+   * the rounded handle end toward the counter. The top end is
+   * simply rounded — it is hidden inside a dango whenever one is
+   * involved, so there is no tip to show.
+   */
+  private drawStick(topY: number): void {
+    const g = this.stickGfx;
+    if (!g) return;
+    const yTop = topY - STICK_PIVOT_Y;
+    const yBot = STICK_BOTTOM_Y - STICK_PIVOT_Y;
+    g.clear();
+    g.fillStyle(0xb27c4a, 1);
+    g.fillRect(-5, yTop + 4, 10, yBot - yTop - 4);
+    g.fillEllipse(0, yTop + 4, 10, 8);
+    g.fillStyle(0xc79a63, 1);
+    g.fillRect(-1.5, yTop + 6, 3, yBot - yTop - 8);
+    g.fillStyle(0xb27c4a, 1);
+    g.fillCircle(0, yBot + 2, 8);
+  }
+
+  /** Re-aim the shaft's top end (called as a sliding dango moves). */
+  private refreshStickTop(): void {
+    if (this.stickGfx?.active) this.drawStick(this.stickTopY());
+  }
+
+  /**
+   * Redraw the big building skewer: ONE bamboo stick — shaft
+   * running down through the stack, rounded handle end toward
+   * the counter, and the top end capped by the top dango (see
+   * stickTopY). The stick is drawn FIRST, so seated dango cover
+   * the shaft where they sit on it: it disappears into each
+   * dango's underside. `built[0]` is the bottom dango, just
+   * above the handle section.
    */
   private renderSkewer(squashLast = false): void {
     if (!this.skewer) return;
     this.skewer.removeAll(true);
     const g = this.add.graphics();
     g.setPosition(SKEWER_X, STICK_PIVOT_Y);
-    const yTop = TIP_Y - STICK_PIVOT_Y;
-    const yBot = STICK_BOTTOM_Y - STICK_PIVOT_Y;
-    g.fillStyle(0xb27c4a, 1);
-    g.fillRect(-5, yTop + 12, 10, yBot - yTop - 12);
-    g.fillTriangle(-6, yTop + 14, 6, yTop + 14, 0, yTop);
-    g.fillStyle(0xc79a63, 1);
-    g.fillRect(-1.5, yTop + 14, 3, yBot - yTop - 14);
-    g.fillStyle(0xb27c4a, 1);
-    g.fillCircle(0, yBot + 2, 8);
     this.stickGfx = g;
     this.skewer.add([g]);
+    this.drawStick(this.stickTopY());
     this.built.forEach((kind, i) => {
       const img = this.add
         .image(SKEWER_X, SLOT_BOTTOM_Y - i * SLOT_STEP, kind)
