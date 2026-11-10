@@ -1,44 +1,50 @@
 /**
  * Result screen (Dango Order) — "Today's Dango Shop".
  *
- * Like Dango Drop's "Today's Dango Shop", a finished shift is reframed
- * as a shop report: the skewers you served were sold, and here is the
- * total. Shows DG earned (counting up), orders served, best combo,
- * best results, and a NEW RECORD badge when a record was broken.
+ * Like Dango Drop's "Today's Dango Shop", a finished shift is
+ * reframed as a shop report: the skewers you served were sold, and
+ * here is the total.
  *
- * v2 — RANKING: when the shared family leaderboard is enabled, the
- * screen grows a RANKING section below the report (the page scrolls,
- * the same drag/wheel scrolling as Dango Drop's shop screen). The
- * score was already submitted by the GameScene without waiting; this
- * screen shows "Loading..." and fills in the board and your rank when
- * the replies arrive. Offline, a plain message shows instead and the
- * rest of the screen works exactly as before.
+ * v4 — redesigned after Dango Tower v3.7's result screen (which
+ * follows Dango Drop's current one):
+ *   - The report is a cream "receipt" panel (rounded, brown border,
+ *     inner frame) with dango art on the stat rows and a customer
+ *     animal peeking from its corner, a TOTAL row with a gold coin
+ *     and a count-up, a BEST SCORE row, and a blinking gold
+ *     "★ NEW RECORD! ★" when a record was broken.
+ *   - PLAY AGAIN / TITLE live in a fixed header bar that stays on
+ *     screen while the page scrolls (plus a PLAY AGAIN at the very
+ *     bottom), the Dango Drop way.
+ *   - The RANKING section is the shared RankingBoard panel — the
+ *     same component as the title's RankingScene, name button and
+ *     all. The score was already submitted by the GameScene without
+ *     waiting; the board waits for that promise before its first
+ *     load, and the rank line fills in when the reply arrives.
  */
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '../config/dimensions';
-import { BACKGROUND_KEY } from '../constants/assets';
-import type {
-  BoardKind,
-  LeaderboardEntry,
-  SubmitResult,
-} from '../leaderboard';
+import { BACKGROUND_KEY, animalKey } from '../constants/assets';
+import { FONT_BODY, FONT_HEADING } from '../constants/fonts';
+import type { SubmitResult } from '../leaderboard';
 import { bgm } from '../systems/bgm';
 import { CURRENCY } from '../systems/EconomyConfig';
-import { isRankingEnabled, leaderboard } from '../systems/LeaderboardClient';
-import {
-  COLOR_ACCENT,
-  COLOR_TEXT,
-  addSoftPanel,
-  bodyText,
-  headingText,
-  makeButton,
-} from './ui';
+import { isRankingEnabled } from '../systems/LeaderboardClient';
+import { sound } from '../systems/sound';
+import { RankingBoard } from '../ui/RankingBoard';
+import { COLOR_TEXT, addSoftPanel, headingText, makeButton } from './ui';
 
 export const RESULT_SCENE_KEY = 'ResultScene';
 
 export interface ResultData {
+  /** Total DG for the run. */
   dg: number;
+  /** Orders (customers) served during the shift. */
   served: number;
+  /** Individual skewers served (display only; not a ranking stat). */
+  skewersServed: number;
+  /** Golden (VIP) skewers served during the shift. */
+  goldenSkewers: number;
+  /** Best combo reached during the shift. */
   bestCombo: number;
   bestDG: number;
   bestServed: number;
@@ -52,24 +58,30 @@ export interface ResultData {
   submission?: Promise<SubmitResult>;
 }
 
+/** Depth of the fixed header (always above the scrolling page). */
+const FIXED_UI_DEPTH = 200;
+
 /** Page height when the ranking section is present. */
-const CONTENT_HEIGHT_RANKING = 1560;
-/** Y of the RANKING heading. */
-const RANKING_TOP = 884;
-/** First board row Y. */
-const BOARD_TOP = 1012;
-/** Board row height. */
-const ROW_H = 36;
+const CONTENT_HEIGHT_RANKING = 1330;
+
+/** Receipt panel geometry (the sales report). */
+const RECEIPT = { x: 30, y: 244, width: 480, height: 470, radius: 16 } as const;
+
+/** Ranking panel geometry (shared RankingBoard). */
+const RANKING = { x: 30, y: 754, width: 480, height: 466, maxRows: 10 } as const;
+
+const COLOR = {
+  border: 0x5a3a28,
+  borderSoft: 0xc89b6a,
+  goldText: '#d98a1c',
+  totalText: '#c2434f',
+  subText: '#a08060',
+} as const;
+
+const TOTAL_COUNT_UP_MS = 900;
+const TOTAL_COUNT_UP_DELAY_MS = 250;
 
 export class ResultScene extends Phaser.Scene {
-  private boardObjects: Phaser.GameObjects.GameObject[] = [];
-  private tabTexts = new Map<BoardKind, Phaser.GameObjects.Text>();
-  private tabLines = new Map<BoardKind, Phaser.GameObjects.Rectangle>();
-  private statusText: Phaser.GameObjects.Text | null = null;
-  private ownRankText: Phaser.GameObjects.Text | null = null;
-  private currentBoard: BoardKind = 'weekly';
-  private submitResult: SubmitResult | null = null;
-  private runDG = 0;
   private alive = false;
 
   constructor() {
@@ -82,12 +94,6 @@ export class ResultScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.alive = false;
     });
-    this.boardObjects = [];
-    this.tabTexts.clear();
-    this.tabLines.clear();
-    this.submitResult = null;
-    this.currentBoard = 'weekly';
-    this.runDG = data.dg;
 
     const ranking = isRankingEnabled();
     const contentHeight = ranking ? CONTENT_HEIGHT_RANKING : GAME_HEIGHT;
@@ -108,117 +114,366 @@ export class ResultScene extends Phaser.Scene {
       );
       this.setupScroll(contentHeight);
     }
-    // Soft panels keep the headings and the score readable over the art.
-    addSoftPanel(this, GAME_WIDTH / 2, 122, 440, 140, 0.45);
-    addSoftPanel(this, GAME_WIDTH / 2, 318, 460, 190, 0.5);
 
-    headingText(this, GAME_WIDTH / 2, 96, "Today's", 36);
-    headingText(this, GAME_WIDTH / 2, 148, 'Dango Shop', 44);
+    this.drawHeading();
+    this.drawReceipt(data);
+    if (ranking) {
+      this.drawRankingSection(data);
+      makeButton(
+        this,
+        GAME_WIDTH / 2,
+        CONTENT_HEIGHT_RANKING - 54,
+        300,
+        72,
+        'PLAY AGAIN',
+        () => {
+          this.scene.start('GameScene');
+        },
+      );
+    }
+    // Fixed header last: it floats above the scrolling page.
+    this.drawFixedHeader();
+  }
+
+  // ----- heading -------------------------------------------------------
+
+  private drawHeading(): void {
+    addSoftPanel(this, GAME_WIDTH / 2, 168, 460, 148, 0.45);
+    headingText(this, GAME_WIDTH / 2, 140, "Today's", 34);
+    headingText(this, GAME_WIDTH / 2, 192, 'Dango Shop', 46);
+  }
+
+  // ----- fixed header (PLAY AGAIN / TITLE, always reachable) ----------
+
+  private drawFixedHeader(): void {
+    const buttonY = 48;
+    const buttonW = 202;
+    const buttonH = 46;
+    const gap = 14;
+    const barHeight = buttonY + buttonH / 2 + 14;
+
+    const backing = this.add.graphics();
+    backing.fillStyle(0xfff7e6, 0.92);
+    backing.fillRect(0, 0, GAME_WIDTH, barHeight);
+    backing.lineStyle(2, COLOR.borderSoft, 0.6);
+    backing.lineBetween(0, barHeight, GAME_WIDTH, barHeight);
+    backing.setScrollFactor(0).setDepth(FIXED_UI_DEPTH);
+
+    const leftCenterX = GAME_WIDTH / 2 - (buttonW * 2 + gap) / 2 + buttonW / 2;
+    this.drawFixedButton(
+      leftCenterX,
+      buttonY,
+      buttonW,
+      buttonH,
+      'PLAY AGAIN',
+      0xe86a7a,
+      () => this.scene.start('GameScene'),
+    );
+    this.drawFixedButton(
+      leftCenterX + buttonW + gap,
+      buttonY,
+      buttonW,
+      buttonH,
+      'TITLE',
+      0x8a5a34,
+      () => this.scene.start('TitleScene'),
+    );
+  }
+
+  private drawFixedButton(
+    centerX: number,
+    centerY: number,
+    width: number,
+    height: number,
+    label: string,
+    fillColor: number,
+    onTap: () => void,
+  ): void {
+    // Flat fill, not a gradient: Phaser's canvas renderer washes
+    // Graphics gradients out to near-white, and flat color matches
+    // the menu buttons' look anyway.
+    const frame = this.add.graphics();
+    frame.fillStyle(fillColor, 1);
+    frame.fillRoundedRect(centerX - width / 2, centerY - height / 2, width, height, 12);
+    frame.lineStyle(2.5, COLOR.border);
+    frame.strokeRoundedRect(centerX - width / 2, centerY - height / 2, width, height, 12);
+    frame.setScrollFactor(0).setDepth(FIXED_UI_DEPTH);
+
+    this.add
+      .text(centerX, centerY, label, {
+        fontFamily: FONT_HEADING,
+        fontSize: '17px',
+        color: '#ffffff',
+        letterSpacing: 1,
+      })
+      .setOrigin(0.5)
+      .setShadow(0, 2, 'rgba(0,0,0,0.28)', 2)
+      .setScrollFactor(0)
+      .setDepth(FIXED_UI_DEPTH);
+
+    const hit = this.add
+      .rectangle(centerX, centerY, width, height, 0xffffff, 0)
+      .setInteractive({ useHandCursor: true })
+      .setScrollFactor(0)
+      .setDepth(FIXED_UI_DEPTH);
+    this.bindTap(hit, onTap);
+  }
+
+  /** Tap = pointerup without a drag (scrolling must not fire buttons). */
+  private bindTap(target: Phaser.GameObjects.GameObject, onTap: () => void): void {
+    target.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.getDistance() < 12) {
+        sound.unlock();
+        sound.click();
+        onTap();
+      }
+    });
+  }
+
+  // ----- receipt (the sales report) -------------------------------------
+
+  private drawReceipt(data: ResultData): void {
+    const r = RECEIPT;
+
+    // Cream paper with a brown border and a thin inner frame — the
+    // shop-sign look from Dango Drop's receipt.
+    const panel = this.add.graphics();
+    panel.fillStyle(0xfff7e6, 0.97);
+    panel.fillRoundedRect(r.x, r.y, r.width, r.height, r.radius);
+    panel.lineStyle(4, COLOR.border);
+    panel.strokeRoundedRect(r.x, r.y, r.width, r.height, r.radius);
+    panel.lineStyle(1.5, COLOR.borderSoft, 0.55);
+    panel.strokeRoundedRect(r.x + 8, r.y + 8, r.width - 16, r.height - 16, r.radius - 5);
+
+    this.add
+      .text(GAME_WIDTH / 2, r.y + 38, "TODAY'S SALES", {
+        fontFamily: FONT_HEADING,
+        fontSize: '22px',
+        color: COLOR_TEXT,
+        letterSpacing: 2,
+      })
+      .setOrigin(0.5);
+    this.add
+      .text(GAME_WIDTH / 2, r.y + 64, 'sold at the shop today!', {
+        fontFamily: FONT_BODY,
+        fontSize: '13px',
+        fontStyle: 'bold',
+        color: COLOR.subText,
+      })
+      .setOrigin(0.5);
+    // A customer friend peeks from the receipt's corner — the shop's
+    // regulars are part of the report now.
+    this.add
+      .image(r.x + r.width - 52, r.y + 44, animalKey('rabbit'))
+      .setDisplaySize(62, 62);
+
+    // Stat rows: little art on the left, label, value on the right.
+    this.drawStatRow(r.y + 108, 'stack', 'Orders served', `${data.served}`);
+    this.drawStatRow(r.y + 152, 'sakura', 'Skewers served', `${data.skewersServed}`);
+    this.drawStatRow(r.y + 196, 'mitarashi', 'Max combo', `x${data.bestCombo}`);
+    this.drawStatRow(
+      r.y + 240,
+      'golden',
+      'Golden skewers',
+      `${data.goldenSkewers}`,
+      true,
+    );
+
+    const divider1 = this.add.graphics();
+    divider1.lineStyle(2, COLOR.border, 0.65);
+    divider1.lineBetween(r.x + 28, r.y + 276, r.x + r.width - 28, r.y + 276);
+    this.drawTotalRow(data.dg, r.y + 312);
+
+    const divider2 = this.add.graphics();
+    divider2.lineStyle(1.5, COLOR.border, 0.35);
+    divider2.lineBetween(r.x + 28, r.y + 354, r.x + r.width - 28, r.y + 354);
+    this.drawBestRow(data, r.y + 384);
+    this.add
+      .text(
+        GAME_WIDTH / 2,
+        r.y + 412,
+        `Best served ${data.bestServed}  ·  Best combo x${data.bestComboBest}`,
+        {
+          fontFamily: FONT_BODY,
+          fontSize: '13px',
+          fontStyle: 'bold',
+          color: COLOR.subText,
+        },
+      )
+      .setOrigin(0.5);
 
     if (data.isNewRecord) {
-      const badge = this.add
-        .text(GAME_WIDTH / 2, 206, 'NEW RECORD!', {
-          fontFamily: '"Mochiy Pop One", "Zen Maru Gothic", sans-serif',
-          fontSize: '26px',
-          color: '#ffffff',
-          backgroundColor: '#e86a7a',
-          padding: { x: 18, y: 8 },
+      const newRecord = this.add
+        .text(GAME_WIDTH / 2, r.y + 440, '★ NEW RECORD! ★', {
+          fontFamily: FONT_HEADING,
+          fontSize: '16px',
+          color: COLOR.goldText,
         })
         .setOrigin(0.5);
       this.tweens.add({
-        targets: badge,
-        scale: 1.1,
-        duration: 400,
+        targets: newRecord,
+        alpha: 0.3,
+        duration: 500,
         yoyo: true,
         repeat: -1,
       });
     }
+  }
 
-    // The day's takings count up — the register filling, in numbers.
-    const dgText = this.add
-      .text(GAME_WIDTH / 2, 292, `0 ${CURRENCY}`, {
-        fontFamily: '"Mochiy Pop One", "Zen Maru Gothic", sans-serif',
-        fontSize: '64px',
-        color: '#5a3a28',
+  /**
+   * One stat row. `art` picks the little picture on the left: a
+   * mini stack of dango, one dango face, or the golden dango.
+   */
+  private drawStatRow(
+    y: number,
+    art: 'stack' | 'sakura' | 'mitarashi' | 'golden',
+    label: string,
+    value: string,
+    isGold = false,
+  ): void {
+    const r = RECEIPT;
+    const artX = r.x + 54;
+    if (art === 'stack') {
+      this.add.image(artX, y - 9, 'shiratama').setDisplaySize(26, 26);
+      this.add.image(artX, y + 11, 'anko').setDisplaySize(26, 26);
+    } else {
+      this.add.image(artX, y, art).setDisplaySize(32, 32);
+    }
+    this.add
+      .text(r.x + 88, y, label, {
+        fontFamily: FONT_HEADING,
+        fontSize: '17px',
+        color: COLOR_TEXT,
       })
-      .setOrigin(0.5);
+      .setOrigin(0, 0.5);
+    this.add
+      .text(r.x + r.width - 28, y, value, {
+        fontFamily: FONT_HEADING,
+        fontSize: '20px',
+        color: isGold ? COLOR.goldText : COLOR_TEXT,
+      })
+      .setOrigin(1, 0.5);
+  }
+
+  /** TOTAL row: a gold coin and the total counting up, register-style. */
+  private drawTotalRow(totalDG: number, y: number): void {
+    const r = RECEIPT;
+    this.drawCoin(r.x + 54, y, 15);
+    this.add
+      .text(r.x + 82, y, 'TOTAL', {
+        fontFamily: FONT_HEADING,
+        fontSize: '20px',
+        color: COLOR_TEXT,
+      })
+      .setOrigin(0, 0.5);
+
+    const totalText = this.add
+      .text(r.x + r.width - 28, y, `0 ${CURRENCY}`, {
+        fontFamily: FONT_HEADING,
+        fontSize: '34px',
+        color: COLOR.totalText,
+      })
+      .setOrigin(1, 0.5);
+
+    if (totalDG <= 0) {
+      totalText.setText(`0 ${CURRENCY}`);
+      return;
+    }
     const counter = { value: 0 };
     this.tweens.add({
       targets: counter,
-      value: data.dg,
-      duration: Math.min(1200, 350 + data.dg * 0.6),
-      ease: 'Sine.easeOut',
+      value: totalDG,
+      duration: TOTAL_COUNT_UP_MS,
+      delay: TOTAL_COUNT_UP_DELAY_MS,
+      ease: 'Cubic.easeOut',
       onUpdate: () => {
-        dgText.setText(`${Math.round(counter.value)} ${CURRENCY}`);
+        totalText.setText(`${Math.floor(counter.value).toLocaleString()} ${CURRENCY}`);
       },
       onComplete: () => {
-        dgText.setText(`${data.dg} ${CURRENCY}`);
+        totalText.setText(`${totalDG.toLocaleString()} ${CURRENCY}`);
+        // A little hop when the register finishes.
+        this.tweens.add({
+          targets: totalText,
+          scale: 1.12,
+          duration: 140,
+          yoyo: true,
+          ease: 'Quad.easeOut',
+        });
       },
     });
-    bodyText(
-      this,
-      GAME_WIDTH / 2,
-      368,
-      'sold at the shop today!',
-      20,
-    ).setOrigin(0.5);
 
-    const panel = this.add.rectangle(
-      GAME_WIDTH / 2,
-      508,
-      420,
-      190,
-      0xfff7e6,
-      1,
-    );
-    panel.setStrokeStyle(2, 0xc89b6a);
-    const rows: [string, string][] = [
-      ['Orders served', `${data.served}`],
-      ['Best combo', `x${data.bestCombo}`],
-      ['Best DG', `${data.bestDG} ${CURRENCY}`],
-      ['Best served', `${data.bestServed}`],
-    ];
-    rows.forEach(([label, value], i) => {
-      const y = 448 + i * 34;
-      this.add
-        .text(GAME_WIDTH / 2 - 190, y, label, {
-          fontFamily: '"Zen Maru Gothic", sans-serif',
-          fontSize: '20px',
-          color: '#5a3a28',
-        })
-        .setOrigin(0, 0.5);
-      this.add
-        .text(GAME_WIDTH / 2 + 190, y, value, {
-          fontFamily: '"Zen Maru Gothic", sans-serif',
-          fontSize: '20px',
-          fontStyle: 'bold',
-          color: '#5a3a28',
-        })
-        .setOrigin(1, 0.5);
-    });
-
-    makeButton(this, GAME_WIDTH / 2, 680, 300, 72, 'PLAY AGAIN', () => {
-      this.scene.start('GameScene');
-    });
-    makeButton(
-      this,
-      GAME_WIDTH / 2,
-      772,
-      300,
-      56,
-      'TITLE',
-      () => {
-        this.scene.start('TitleScene');
-      },
-      22,
-    );
-
-    if (ranking) {
-      this.drawRankingSection(data);
+    // Coins pop while the total counts up — DG being handed over.
+    for (let i = 0; i < 5; i += 1) {
+      this.time.delayedCall(TOTAL_COUNT_UP_DELAY_MS + i * 140, () => {
+        if (this.alive) this.popCoin(r.x + 54, y);
+      });
     }
   }
 
-  // ----- scrolling (mirrors Dango Drop's shop screen) ----------------
+  private drawBestRow(data: ResultData, y: number): void {
+    const r = RECEIPT;
+    this.add
+      .text(r.x + 28, y, 'BEST SCORE', {
+        fontFamily: FONT_HEADING,
+        fontSize: '17px',
+        color: COLOR.subText,
+      })
+      .setOrigin(0, 0.5);
+    this.add
+      .text(r.x + r.width - 28, y, `${data.bestDG.toLocaleString()} ${CURRENCY}`, {
+        fontFamily: FONT_HEADING,
+        fontSize: '22px',
+        color: COLOR.subText,
+      })
+      .setOrigin(1, 0.5);
+  }
+
+  /** One gold coin (gold body, pale highlight, darker rim). */
+  private drawCoin(x: number, y: number, radius: number): Phaser.GameObjects.Container {
+    const coin = this.add.container(x, y);
+    const body = this.add.circle(0, 0, radius, 0xe8a832);
+    const highlight = this.add.circle(-radius * 0.28, -radius * 0.3, radius * 0.55, 0xffe9a8, 0.85);
+    const rim = this.add.circle(0, 0, radius).setStrokeStyle(2.5, 0xb47c1c);
+    coin.add([body, highlight, rim]);
+    return coin;
+  }
+
+  /** A coin floats up and fades — the "sold!" moment. */
+  private popCoin(x: number, y: number): void {
+    const coin = this.drawCoin(x, y, 12);
+    const drift = Phaser.Math.Between(-26, 26);
+    this.tweens.add({
+      targets: coin,
+      x: x + drift,
+      y: y - 46,
+      alpha: 0,
+      scale: 0.6,
+      duration: 650,
+      ease: 'Cubic.easeOut',
+      onComplete: () => coin.destroy(),
+    });
+  }
+
+  // ----- ranking ---------------------------------------------------------
+
+  private drawRankingSection(data: ResultData): void {
+    const board = new RankingBoard(this, RANKING);
+    if (!board.create(data.submission)) return;
+    void data.submission
+      ?.then((result) => {
+        if (!this.alive) return;
+        if (result.online) {
+          board.applyMyRank({
+            alltime: result.alltime,
+            weekly: result.weekly,
+            score: data.dg,
+          });
+        }
+      })
+      .catch(() => {});
+  }
+
+  // ----- scrolling (mirrors Dango Drop's shop screen) --------------------
 
   private setupScroll(contentHeight: number): void {
     const camera = this.cameras.main;
@@ -238,208 +493,5 @@ export class ResultScene extends Phaser.Scene {
         camera.scrollY += dy * 0.5;
       },
     );
-  }
-
-  // ----- ranking -------------------------------------------------------
-
-  private drawRankingSection(data: ResultData): void {
-    headingText(this, GAME_WIDTH / 2, RANKING_TOP, 'RANKING', 32);
-
-    // Tabs: WEEKLY first — a fresh board every week is the main one
-    // (the family rule from Dango Drop's ranking, ADR-0013).
-    const tabs: [BoardKind, string, number][] = [
-      ['weekly', 'WEEKLY', GAME_WIDTH / 2 - 105],
-      ['alltime', 'ALL TIME', GAME_WIDTH / 2 + 105],
-    ];
-    for (const [kind, label, x] of tabs) {
-      const text = this.add
-        .text(x, RANKING_TOP + 52, label, {
-          fontFamily: '"Mochiy Pop One", "Zen Maru Gothic", sans-serif',
-          fontSize: '21px',
-          color: COLOR_TEXT,
-        })
-        .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true });
-      const line = this.add.rectangle(x, RANKING_TOP + 74, 120, 4, 0xe86a7a, 1);
-      text.on('pointerup', () => {
-        if (kind !== this.currentBoard) {
-          this.currentBoard = kind;
-          this.refreshTabs();
-          this.loadBoard();
-        }
-      });
-      this.tabTexts.set(kind, text);
-      this.tabLines.set(kind, line);
-    }
-    this.refreshTabs();
-
-    this.ownRankText = this.add
-      .text(GAME_WIDTH / 2, RANKING_TOP + 104, '', {
-        fontFamily: '"Zen Maru Gothic", sans-serif',
-        fontSize: '19px',
-        fontStyle: 'bold',
-        color: COLOR_ACCENT,
-      })
-      .setOrigin(0.5);
-
-    this.statusText = this.add
-      .text(GAME_WIDTH / 2, BOARD_TOP + 40, 'Loading...', {
-        fontFamily: '"Zen Maru Gothic", sans-serif',
-        fontSize: '20px',
-        color: COLOR_TEXT,
-      })
-      .setOrigin(0.5);
-
-    makeButton(
-      this,
-      GAME_WIDTH / 2,
-      CONTENT_HEIGHT_RANKING - 64,
-      300,
-      72,
-      'PLAY AGAIN',
-      () => {
-        this.scene.start('GameScene');
-      },
-    );
-
-    // The submission was fired by the GameScene; fill the rank in
-    // when it lands.
-    if (data.submission) {
-      void data.submission.then((result) => {
-        if (!this.alive) return;
-        this.submitResult = result;
-        this.refreshOwnRankLine();
-        // The board may have been drawn before our own score was
-        // registered; redraw so the YOU highlight is right.
-        this.loadBoard();
-      });
-    }
-    this.loadBoard();
-  }
-
-  private refreshTabs(): void {
-    for (const [kind, text] of this.tabTexts) {
-      const active = kind === this.currentBoard;
-      text.setColor(active ? COLOR_ACCENT : COLOR_TEXT);
-      this.tabLines.get(kind)?.setVisible(active);
-    }
-  }
-
-  private refreshOwnRankLine(): void {
-    if (!this.ownRankText || !this.submitResult) return;
-    const { weekly, alltime, online } = this.submitResult;
-    if (!online) {
-      this.ownRankText.setText('');
-      return;
-    }
-    const formatRank = (
-      label: string,
-      info: { rank: number | null; percentile: number | null } | null,
-    ): string | null => {
-      if (!info || info.rank == null) return null;
-      const top =
-        info.percentile != null ? ` (top ${info.percentile}%)` : '';
-      return `${label} #${info.rank}${top}`;
-    };
-    const parts = [
-      formatRank('WEEKLY', weekly),
-      formatRank('ALL TIME', alltime),
-    ].filter((part): part is string => part !== null);
-    this.ownRankText.setText(
-      parts.length > 0 ? `Your rank: ${parts.join('  ·  ')}` : '',
-    );
-  }
-
-  private clearBoard(): void {
-    for (const obj of this.boardObjects) obj.destroy();
-    this.boardObjects = [];
-  }
-
-  private loadBoard(): void {
-    const kind = this.currentBoard;
-    this.clearBoard();
-    this.statusText?.setText('Loading...').setVisible(true);
-    void leaderboard.fetchLeaderboard(kind, 10).then((board) => {
-      if (!this.alive || kind !== this.currentBoard) return;
-      this.clearBoard();
-      if (!board.online && board.entries.length === 0) {
-        this.statusText?.setText('Could not load ranking').setVisible(true);
-        return;
-      }
-      if (board.entries.length === 0) {
-        this.statusText
-          ?.setText('No scores yet — be the first!')
-          .setVisible(true);
-        return;
-      }
-      this.statusText?.setVisible(false);
-      board.entries.forEach((entry, i) => {
-        this.drawBoardRow(entry, BOARD_TOP + i * ROW_H, entry.is_you === true);
-      });
-      // Out of the top 10? Your own row goes under a divider, from
-      // the submission's rank for this board (Dango Drop does the
-      // same).
-      const rankInfo =
-        kind === 'weekly'
-          ? this.submitResult?.weekly
-          : this.submitResult?.alltime;
-      const inTop = board.entries.some((e) => e.is_you === true);
-      if (!inTop && rankInfo?.rank != null && rankInfo.rank > 10) {
-        const y = BOARD_TOP + board.entries.length * ROW_H + 14;
-        const divider = this.add.rectangle(
-          GAME_WIDTH / 2,
-          y - ROW_H / 2,
-          420,
-          2,
-          0xc89b6a,
-          1,
-        );
-        this.boardObjects.push(divider);
-        this.drawBoardRow(
-          {
-            rank: rankInfo.rank,
-            player_id: '',
-            display_name: 'YOU',
-            score: this.runDG,
-            is_you: true,
-          },
-          y,
-          true,
-        );
-      }
-    });
-  }
-
-  private drawBoardRow(
-    entry: LeaderboardEntry,
-    y: number,
-    highlight: boolean,
-  ): void {
-    const color = highlight ? COLOR_ACCENT : COLOR_TEXT;
-    const rank = this.add
-      .text(GAME_WIDTH / 2 - 200, y, `${entry.rank}.`, {
-        fontFamily: '"Zen Maru Gothic", sans-serif',
-        fontSize: '20px',
-        fontStyle: 'bold',
-        color,
-      })
-      .setOrigin(0, 0.5);
-    const name = this.add
-      .text(GAME_WIDTH / 2 - 150, y, entry.display_name, {
-        fontFamily: '"Zen Maru Gothic", sans-serif',
-        fontSize: '20px',
-        fontStyle: highlight ? 'bold' : 'normal',
-        color,
-      })
-      .setOrigin(0, 0.5);
-    const score = this.add
-      .text(GAME_WIDTH / 2 + 200, y, `${entry.score} ${CURRENCY}`, {
-        fontFamily: '"Zen Maru Gothic", sans-serif',
-        fontSize: '20px',
-        fontStyle: 'bold',
-        color,
-      })
-      .setOrigin(1, 0.5);
-    this.boardObjects.push(rank, name, score);
   }
 }

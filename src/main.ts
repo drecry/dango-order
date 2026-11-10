@@ -3,7 +3,7 @@
  * Creates the Phaser game and registers the scenes.
  *
  * Screen flow: Boot -> Preload -> Title -> Game -> Result
- *                       Title -> How to Play / Meet the Dango -> Title
+ *                       Title -> How to Play / Meet the Dango / Ranking -> Title
  */
 import Phaser from 'phaser';
 import { createGameConfig } from './config/game-config';
@@ -12,6 +12,7 @@ import { PreloadScene } from './scenes/PreloadScene';
 import { TitleScene } from './scenes/TitleScene';
 import { HowToScene } from './scenes/HowToScene';
 import { MeetScene } from './scenes/MeetScene';
+import { RankingScene } from './scenes/RankingScene';
 import { GameScene } from './scenes/GameScene';
 import { ResultScene } from './scenes/ResultScene';
 
@@ -23,6 +24,7 @@ const bootGame = (): void => {
     TitleScene,
     HowToScene,
     MeetScene,
+    RankingScene,
     GameScene,
     ResultScene,
   ];

@@ -171,6 +171,8 @@ export class GameScene extends Phaser.Scene {
   private playElapsedMs = 0;
   /** Golden SKEWERS served this shift (ranking stats). */
   private goldenServed = 0;
+  /** Total skewers served this shift (result screen display only). */
+  private skewersServed = 0;
   private lastServe: LastServe | null = null;
   /** Last whole second shown, for the countdown tick. */
   private lastWholeSec = -1;
@@ -228,6 +230,7 @@ export class GameScene extends Phaser.Scene {
     this.betweenCustomers = false;
     this.playElapsedMs = 0;
     this.goldenServed = 0;
+    this.skewersServed = 0;
     this.lastServe = null;
     this.lastWholeSec = -1;
     this.padCards.clear();
@@ -618,6 +621,7 @@ export class GameScene extends Phaser.Scene {
     );
     this.state = result.state;
     this.goldenServed += result.goldenSkewers;
+    this.skewersServed += this.skewers.length;
     this.lastServe = {
       skewers: this.skewers.map((s) => [...s]),
       patienceLeft,
@@ -820,6 +824,8 @@ export class GameScene extends Phaser.Scene {
       this.scene.start('ResultScene', {
         dg,
         served: this.state.served,
+        skewersServed: this.skewersServed,
+        goldenSkewers: this.goldenServed,
         bestCombo: this.state.bestCombo,
         bestDG: best.bestDG,
         bestServed: best.bestServed,

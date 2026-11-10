@@ -13,7 +13,7 @@ import { ALL_DANGO_KINDS, BACKGROUND_KEY } from '../constants/assets';
 import { getSavedDisplayName } from '../leaderboard';
 import { loadBest } from '../logic/storage';
 import { bgm } from '../systems/bgm';
-import { leaderboard } from '../systems/LeaderboardClient';
+import { isRankingEnabled, leaderboard } from '../systems/LeaderboardClient';
 import { openOptions } from '../systems/OptionsOverlay';
 import { sound } from '../systems/sound';
 import {
@@ -74,10 +74,18 @@ export class TitleScene extends Phaser.Scene {
       this.scene.start('GameScene');
     });
 
+    // With ranking on, the stack squeezes up a little to fit a
+    // RANKING button under OPTIONS (the Dango Tower title does the
+    // same shift). Without ranking, the layout is exactly as before.
+    const ranking = isRankingEnabled();
+    const subY: [number, number, number] = ranking
+      ? [536, 598, 660]
+      : [544, 608, 672];
+
     makeButton(
       this,
       GAME_WIDTH / 2,
-      544,
+      subY[0],
       300,
       56,
       'HOW TO PLAY',
@@ -90,7 +98,7 @@ export class TitleScene extends Phaser.Scene {
     makeButton(
       this,
       GAME_WIDTH / 2,
-      608,
+      subY[1],
       300,
       56,
       'MEET THE DANGO',
@@ -103,7 +111,7 @@ export class TitleScene extends Phaser.Scene {
     makeButton(
       this,
       GAME_WIDTH / 2,
-      672,
+      subY[2],
       300,
       56,
       'OPTIONS',
@@ -124,12 +132,27 @@ export class TitleScene extends Phaser.Scene {
       22,
     );
 
+    if (ranking) {
+      makeButton(
+        this,
+        GAME_WIDTH / 2,
+        722,
+        300,
+        56,
+        'RANKING',
+        () => {
+          this.scene.start('RankingScene');
+        },
+        22,
+      );
+    }
+
     const bestLine =
       best.bestDG > 0
         ? `BEST  ${best.bestDG} DG  ·  ${best.bestServed} served  ·  COMBO x${best.bestCombo}`
         : 'No customers yet — your first shift is waiting!';
     this.add
-      .text(GAME_WIDTH / 2, 742, bestLine, {
+      .text(GAME_WIDTH / 2, ranking ? 788 : 742, bestLine, {
         fontFamily: '"Zen Maru Gothic", sans-serif',
         fontSize: '19px',
         fontStyle: 'bold',
